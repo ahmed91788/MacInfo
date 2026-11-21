@@ -59,6 +59,28 @@ jobs:
               raise SystemExit("Notarization not accepted")
           '
 
+      - name: Retrieve Apple notarization log
+        if: always()
+        env:
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          API_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
+          printf '%s\n' "$API_KEY" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+
+          xcrun notarytool log \
+            02a8e355-7d7d-498f-baa2-827efc345e9b \
+            --key "$KEY_PATH" \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
+            notarization-log.json
+
+          cat notarization-log.json
+
       - name: Staple notarization ticket
         run: |
           xcrun stapler staple output/MacInfo.app
