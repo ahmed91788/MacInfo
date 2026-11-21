@@ -1,4 +1,5 @@
-name: Build and Notarize MacInfo
+
+name: Notarize Prebuilt MacInfo
 
 on:
   workflow_dispatch:
@@ -7,295 +8,78 @@ permissions:
   contents: read
 
 jobs:
-  build-and-notarize:
+  notarize:
     runs-on: macos-15
-
-    timeout-minutes: 90
-
-    env:
-      APP_NAME: MacInfo
-      PROJECT: MacInfo.xcodeproj
-      SCHEME: MacInfo
-      CONFIGURATION: Release
-      BUILD_DIR: ${{ github.workspace }}/build
+    timeout-minutes: 60
 
     steps:
-      # -----------------------------------------
-      # 1. Checkout source code
-      # -----------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # -----------------------------------------
-      # 2. Show build environment
-      # -----------------------------------------
       - name: Extract prebuilt app
         run: |
           mkdir -p output
           ditto -x -k releases/MacInfo.zip output
-      # -----------------------------------------
-      # 3. Import Developer ID certificate
-      # -----------------------------------------
-      - name: Install signing certificate
+
+      - name: Verify Developer ID signature
+        run: |
+          codesign --verify --deep --strict --verbose=2 \
+            output/MacInfo.app
+          codesign -dv --verbose=4 output/MacInfo.app
+
+      - name: Configure Apple API key
         env:
-          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          API_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
         run: |
-          set -euo pipefail
+          printf '%s\n' "$API_KEY" \
+            > "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
 
-          CERT_PATH="$RUNNER_TEMP/developer_id.p12"
-          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
-
-          echo "$CERTIFICATE_BASE64" | \
-            base64 --decode > "$CERT_PATH"
-
-          security create-keychain \
-            -p "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-
-          security set-keychain-settings \
-            -lut 21600 \
-            "$KEYCHAIN_PATH"
-
-          security unlock-keychain \
-            -p "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-
-          security import "$CERT_PATH" \
-            -P "$CERTIFICATE_PASSWORD" \
-            -t cert \
-            -f pkcs12 \
-            -k "$KEYCHAIN_PATH"
-
-          security set-key-partition-list \
-            -S apple-tool:,apple: \
-            -k "$KEYCHAIN_PASSWORD" \
-            "$KEYCHAIN_PATH"
-
-          security list-keychains \
-            -d user \
-            -s "$KEYCHAIN_PATH"
-
-          security default-keychain \
-            -d user \
-            -s "$KEYCHAIN_PATH"
-
-          security find-identity \
-            -v -p codesigning \
-            "$KEYCHAIN_PATH"
-
-          rm -f "$CERT_PATH"
-
-      # -----------------------------------------
-      # 4. Build macOS application
-      # -----------------------------------------
-      - name: Build application
+      - name: Submit to Apple Notary Service
         env:
-          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
           set -euo pipefail
 
-          mkdir -p "$BUILD_DIR"
-
-          xcodebuild \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -configuration "$CONFIGURATION" \
-            -sdk macosx \
-            -destination "generic/platform=macOS" \
-            -derivedDataPath "$BUILD_DIR/DerivedData" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
-            CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-            ENABLE_HARDENED_RUNTIME=YES \
-            build
-
-          APP_PATH="$BUILD_DIR/DerivedData/Build/Products/Release/$APP_NAME.app"
-
-          test -d "$APP_PATH"
-
-          mkdir -p "$BUILD_DIR/output"
-
-          ditto "$APP_PATH" \
-            "$BUILD_DIR/output/$APP_NAME.app"
-
-      # -----------------------------------------
-      # 5. Verify code signature
-      # -----------------------------------------
-      - name: Verify signature
-        run: |
-          set -euo pipefail
-
-          APP_PATH="$BUILD_DIR/output/$APP_NAME.app"
-
-          codesign \
-            --verify \
-            --deep \
-            --strict \
-            --verbose=2 \
-            "$APP_PATH"
-
-          codesign \
-            -dv \
-            --verbose=4 \
-            "$APP_PATH" 2>&1
-
-          codesign -d --extract-certificates \
-            "$APP_PATH" 2>/dev/null || true
-
-      # -----------------------------------------
-      # 6. Create ZIP for notarization
-      # -----------------------------------------
-      - name: Create ZIP
-        run: |
-          set -euo pipefail
-
-          cd "$BUILD_DIR/output"
-
-          ditto \
-            -c -k \
-            --keepParent \
-            "$APP_NAME.app" \
-            "$APP_NAME.zip"
-
-      # -----------------------------------------
-      # 7. Configure App Store Connect API key
-      # -----------------------------------------
-      - name: Configure notarization credentials
-        env:
-          API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
-          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-        run: |
-          set -euo pipefail
-
-          KEY_PATH="$RUNNER_TEMP/AuthKey_${API_KEY_ID}.p8"
-
-          printf '%s\n' "$API_PRIVATE_KEY" > "$KEY_PATH"
-
-          chmod 600 "$KEY_PATH"
-
-          xcrun notarytool store-credentials \
-            "notary-profile" \
-            --key "$KEY_PATH" \
-            --key-id "$API_KEY_ID" \
-            --issuer "$API_ISSUER_ID"
-
-      # -----------------------------------------
-      # 8. Submit app to Apple
-      # -----------------------------------------
-      - name: Submit for notarization
-        run: |
-          set -euo pipefail
-
-          ZIP_PATH="$BUILD_DIR/output/$APP_NAME.zip"
-          RESULT_PATH="$BUILD_DIR/notarization.json"
-          LOG_PATH="$BUILD_DIR/notarization-log.json"
-
-          set +e
-          xcrun notarytool submit \
-            "$ZIP_PATH" \
-            --keychain-profile "notary-profile" \
+          xcrun notarytool submit releases/MacInfo.zip \
+            --key "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8" \
+            --key-id "$KEY_ID" \
+            --issuer "$ISSUER_ID" \
             --wait \
-            --timeout 45m \
             --output-format json \
-            > "$RESULT_PATH" 2>&1
+            | tee notarization.json
 
-          EXIT_CODE=$?
-          set -e
-
-          cat "$RESULT_PATH"
-
-          SUBMISSION_ID=$(python3 -c '
+          python3 -c '
           import json
-          try:
-              with open("build/notarization.json") as f:
-                  print(json.load(f).get("id", ""))
-          except (ValueError, OSError):
-              print("")
-          ')
+          with open("notarization.json") as f:
+              result = json.load(f)
+          if result.get("status") != "Accepted":
+              raise SystemExit("Notarization not accepted")
+          '
 
-          if [ -n "$SUBMISSION_ID" ]; then
-            echo "Submission ID: $SUBMISSION_ID"
-
-            xcrun notarytool log \
-              "$SUBMISSION_ID" \
-              --keychain-profile "notary-profile" \
-              --output-format json \
-              > "$LOG_PATH" || true
-
-            cat "$LOG_PATH" 2>/dev/null || true
-          fi
-
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo "::error::Notarization submission failed"
-            exit "$EXIT_CODE"
-          fi
-
-          STATUS=$(python3 -c '
-          import json
-          with open("build/notarization.json") as f:
-              print(json.load(f).get("status", "Unknown"))
-          ')
-
-          echo "Final notarization status: $STATUS"
-
-          if [ "$STATUS" != "Accepted" ]; then
-            echo "::error::Apple did not accept the application"
-            exit 1
-          fi
-
-      # -----------------------------------------
-      # 9. Staple notarization ticket
-      # -----------------------------------------
-      - name: Staple ticket
+      - name: Staple notarization ticket
         run: |
-          set -euo pipefail
+          xcrun stapler staple output/MacInfo.app
+          xcrun stapler validate output/MacInfo.app
 
-          APP_PATH="$BUILD_DIR/output/$APP_NAME.app"
-
-          xcrun stapler staple "$APP_PATH"
-
-          xcrun stapler validate "$APP_PATH"
-
-      # -----------------------------------------
-      # 10. Create final distributable ZIP
-      # -----------------------------------------
-      - name: Package notarized app
+      - name: Package notarized application
         run: |
-          set -euo pipefail
+          ditto -c -k --keepParent \
+            output/MacInfo.app \
+            MacInfo-notarized.zip
 
-          cd "$BUILD_DIR/output"
-
-          rm -f "$APP_NAME.zip"
-
-          ditto \
-            -c -k \
-            --keepParent \
-            "$APP_NAME.app" \
-            "$APP_NAME-notarized.zip"
-
-      # -----------------------------------------
-      # 11. Upload GitHub artifact
-      # -----------------------------------------
       - name: Upload notarized application
         uses: actions/upload-artifact@v4
         with:
           name: MacInfo-notarized
-          path: build/output/MacInfo-notarized.zip
-          retention-days: 30
-          if-no-files-found: error
+          path: MacInfo-notarized.zip
 
-      # -----------------------------------------
-      # 12. Upload diagnostic information
-      # -----------------------------------------
-      - name: Upload notarization diagnostics
+      - name: Upload diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: notarization-diagnostics
-          path: |
-            build/notarization.json
+          path: notarization.json
           if-no-files-found: ignore
-          retention-days: 7
