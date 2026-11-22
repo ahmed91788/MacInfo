@@ -10,7 +10,7 @@ permissions:
 jobs:
   notarize:
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 360
 
     steps:
       - name: Checkout repository
@@ -32,9 +32,9 @@ jobs:
           API_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
           KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
         run: |
-          printf '%s\n' "$API_KEY" \
-            > "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
-          chmod 600 "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
+          printf '%s\n' "$API_KEY" > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
 
       - name: Submit to Apple Notary Service
         env:
@@ -47,39 +47,72 @@ jobs:
             --key "$RUNNER_TEMP/AuthKey_${KEY_ID}.p8" \
             --key-id "$KEY_ID" \
             --issuer "$ISSUER_ID" \
-            --wait \
             --output-format json \
             | tee notarization.json
 
-          python3 -c '
-          import json
-          with open("notarization.json") as f:
-              result = json.load(f)
-          if result.get("status") != "Accepted":
-              raise SystemExit("Notarization not accepted")
-          '
+          SUBMISSION_ID=$(python3 -c \
+            'import json; print(json.load(open("notarization.json"))["id"])')
 
-      - name: Retrieve Apple notarization log
-        if: always()
+          echo "Submission ID: $SUBMISSION_ID"
+          echo "SUBMISSION_ID=$SUBMISSION_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for Apple notarization
         env:
           KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
-          API_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
         run: |
           set -euo pipefail
 
           KEY_PATH="$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
-          printf '%s\n' "$API_KEY" > "$KEY_PATH"
-          chmod 600 "$KEY_PATH"
 
-          xcrun notarytool log \
-            02a8e355-7d7d-498f-baa2-827efc345e9b \
+          for i in $(seq 1 90); do
+            echo "Checking notarization status ($i/90)"
+
+            xcrun notarytool info "$SUBMISSION_ID" \
+              --key "$KEY_PATH" \
+              --key-id "$KEY_ID" \
+              --issuer "$ISSUER_ID" \
+              --output-format json \
+              > notarization-status.json
+
+            cat notarization-status.json
+
+            STATUS=$(python3 -c \
+              'import json; print(json.load(open("notarization-status.json"))["status"])')
+
+            if [ "$STATUS" = "Accepted" ]; then
+              echo "Notarization accepted!"
+              exit 0
+            fi
+
+            if [ "$STATUS" = "Invalid" ]; then
+              echo "Notarization rejected."
+              exit 1
+            fi
+
+            sleep 120
+          done
+
+          echo "Timed out waiting for Apple notarization."
+          exit 1
+
+      - name: Retrieve Apple notarization log
+        if: always() && env.SUBMISSION_ID != ''
+        env:
+          KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_${KEY_ID}.p8"
+
+          xcrun notarytool log "$SUBMISSION_ID" \
             --key "$KEY_PATH" \
             --key-id "$KEY_ID" \
             --issuer "$ISSUER_ID" \
-            notarization-log.json
+            notarization-log.json || true
 
-          cat notarization-log.json
+          if [ -f notarization-log.json ]; then
+            cat notarization-log.json
+          fi
 
       - name: Staple notarization ticket
         run: |
@@ -103,5 +136,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: notarization-diagnostics
-          path: notarization.json
+          path: |
+            notarization.json
+            notarization-status.json
+            notarization-log.json
           if-no-files-found: ignore
