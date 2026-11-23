@@ -36,6 +36,10 @@ enum SecurityAuditExporter {
             """
         }.joined(separator: "\n")
 
+        let scoreText = report.score.map {
+            "\($0) / 100"
+        } ?? "N/A — Incomplete Scan"
+        
         let html = """
         <!doctype html>
         <html lang="en">
@@ -83,7 +87,7 @@ enum SecurityAuditExporter {
             Scan: \(escape(report.createdAt.description))
           </div>
           <div class="score">
-            Heuristic Score: \(report.score) / 100
+            Heuristic Score: \(scoreText) 
           </div>
           <p>
             Applications scanned: \(report.applicationCount)<br>

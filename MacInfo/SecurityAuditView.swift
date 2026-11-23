@@ -56,13 +56,40 @@ struct SecurityAuditView: View {
                     }
                 }
 
-                Button {
-                    store.scan()
-                } label: {
-                    Label("Run Audit", systemImage: "shield.checkered")
+                if store.isScanning {
+                    Button {
+                        store.cancelScan()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark.circle")
+                    }
+                } else {
+                    Button {
+                        store.scan()
+                    } label: {
+                        Label("Run Audit", systemImage: "shield.checkered")
+                    }
                 }
-                .disabled(store.isScanning)
+
             }
+            
+            if store.isScanning {
+                VStack(alignment: .leading, spacing: 8) {
+                    ProgressView(value: store.progress.fraction)
+
+                    HStack {
+                        Text(store.progress.currentScanner)
+
+                        Spacer()
+
+                        Text(
+                            "\(store.progress.completed) / \(store.progress.total)"
+                        )
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
 
             if store.isScanning {
                 ProgressView("Running security audit...")
@@ -94,7 +121,49 @@ struct SecurityAuditView: View {
     }
 
     private func reportContent(_ report: AuditReport) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        let previous = store.history.first {
+            $0.id != report.id
+        }
+
+        let comparison = previous.map {
+            AuditComparison.compare(
+                current: report,
+                previous: $0
+            )
+        }
+        
+        return VStack(alignment: .leading, spacing: 12) {
+            
+            GroupBox("Scanner Coverage") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(report.scanners) { scanner in
+                        HStack {
+                            Image(
+                                systemName: scanner.state == .completed
+                                    ? "checkmark.circle.fill"
+                                    : "exclamationmark.circle.fill"
+                            )
+                            .foregroundStyle(
+                                scanner.state == .completed
+                                    ? .green
+                                    : .orange
+                            )
+
+                            Text(scanner.scanner.title)
+
+                            Spacer()
+
+                            Text(scanner.state.rawValue.capitalized)
+                                .foregroundStyle(.secondary)
+
+                            Text("\(scanner.itemCount)")
+                                .monospacedDigit()
+                        }
+                    }
+                }
+                .padding(8)
+            }
+
             HStack(spacing: 12) {
                 ForEach(
                     [
@@ -120,12 +189,17 @@ struct SecurityAuditView: View {
 
                     Spacer()
 
-                    Text("\(report.score) / 100")
+                    Text(
+                        report.score.map { "\($0) / 100" }
+                        ?? "N/A — Incomplete Scan"
+                    )
                         .font(.title3.bold())
                 }
 
-                ProgressView(value: Double(report.score), total: 100)
-                    .tint(scoreColor(report.score))
+                if let score = report.score {
+                    ProgressView(value: Double(score), total: 100)
+                        .tint(scoreColor(score))
+                }
 
                 Text(
                     "\(report.applicationCount) applications · " +
@@ -193,6 +267,7 @@ struct SecurityAuditView: View {
                     }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contextMenu(forSelectionType: String.self) { ids in
                 Button("View Details") {
                     guard let id = ids.first else { return }
@@ -202,8 +277,39 @@ struct SecurityAuditView: View {
                 guard let id = ids.first else { return }
                 selectedFinding = filteredFindings.first { $0.id == id }
             }
+            
+            if let comparison {
+                HStack(spacing: 12) {
+                    summaryCard(
+                        "New",
+                        comparison.newFindings.count,
+                        .orange
+                    )
 
+                    summaryCard(
+                        "Resolved",
+                        comparison.resolvedFindings.count,
+                        .green
+                    )
+
+                    summaryCard(
+                        "Unchanged",
+                        comparison.unchangedFindings.count,
+                        .secondary
+                    )
+                }
+
+                if !comparison.incomparableCategories.isEmpty {
+                    Text(
+                        "Some categories could not be compared " +
+                        "because scanner coverage was incomplete."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func summaryCard(

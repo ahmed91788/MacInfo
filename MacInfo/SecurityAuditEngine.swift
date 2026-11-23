@@ -2,28 +2,20 @@
 import Foundation
 
 enum SecurityAuditEngine {
-    static func scan() -> AuditReport {
-        let security = SecurityCollector.collect()
-        let applications = ApplicationScanner.scan()
-        let startupItems = StartupScanner.scan()
-
+    static func securityFindings(
+        from snapshot: SecuritySnapshot
+    ) -> [AuditFinding] {
         var findings: [AuditFinding] = []
 
-        // MARK: System security checks
-
-        for check in security.checks {
+        for check in snapshot.checks {
             guard check.status == .disabled else {
                 continue
             }
 
             let severity: AuditSeverity
 
-            switch check.id.lowercased() {
-            case "sip":
-                severity = .high
-            case "filevault":
-                severity = .high
-            case "gatekeeper":
+            switch check.id {
+            case "sip", "filevault", "gatekeeper":
                 severity = .high
             case "firewall":
                 severity = .medium
@@ -44,7 +36,13 @@ enum SecurityAuditEngine {
             )
         }
 
-        // MARK: Application signatures
+        return findings
+    }
+
+    static func applicationFindings(
+        from applications: [InstalledApplication]
+    ) -> [AuditFinding] {
+        var findings: [AuditFinding] = []
 
         for app in applications {
             let severity: AuditSeverity
@@ -81,17 +79,24 @@ enum SecurityAuditEngine {
             )
         }
 
-        // MARK: Startup persistence
+        return findings
+    }
 
-        for item in startupItems {
+    static func persistenceFindings(
+        from items: [StartupItem]
+    ) -> [AuditFinding] {
+        var findings: [AuditFinding] = []
+
+        for item in items {
             for reason in item.reviewReasons {
+                let normalized = reason.lowercased()
                 let severity: AuditSeverity
 
-                if reason.contains("invalid") {
+                if normalized.contains("invalid") {
                     severity = .high
-                } else if reason.contains("temporary") {
+                } else if normalized.contains("temporary") {
                     severity = .medium
-                } else if reason.contains("unsigned") {
+                } else if normalized.contains("unsigned") {
                     severity = .medium
                 } else {
                     severity = .low
@@ -114,6 +119,122 @@ enum SecurityAuditEngine {
             }
         }
 
+        return findings
+    }
+
+    static func scan(
+        progress: @Sendable @escaping (AuditProgress) -> Void
+    ) -> AuditReport {
+        var findings: [AuditFinding] = []
+        var scannerResults: [AuditScannerResult] = []
+
+        var applicationCount = 0
+        var startupCount = 0
+        var completed = 0
+
+        let total = AuditScannerID.allCases.count
+
+        func notify(_ name: String) {
+            progress(
+                AuditProgress(
+                    completed: completed,
+                    total: total,
+                    currentScanner: name
+                )
+            )
+        }
+
+        func record(
+            _ scanner: AuditScannerID,
+            state: AuditScannerState,
+            count: Int,
+            message: String? = nil
+        ) {
+            scannerResults.append(
+                AuditScannerResult(
+                    scanner: scanner,
+                    state: state,
+                    itemCount: count,
+                    message: message
+                )
+            )
+
+            completed += 1
+            notify(scanner.title)
+        }
+
+        // MARK: System security
+
+        notify("System Security")
+
+        if Task<Never, Never>.isCancelled {
+            record(
+                .systemSecurity,
+                state: .cancelled,
+                count: 0
+            )
+        } else {
+            let snapshot = SecurityCollector.collect()
+
+            findings += securityFindings(from: snapshot)
+
+            record(
+                .systemSecurity,
+                state: .completed,
+                count: snapshot.checks.count
+            )
+        }
+
+        // MARK: Applications
+
+        if Task<Never, Never>.isCancelled {
+            record(
+                .applications,
+                state: .cancelled,
+                count: 0
+            )
+        } else {
+            notify("Applications")
+
+            let applications = ApplicationScanner.scan()
+            applicationCount = applications.count
+
+            findings += applicationFindings(
+                from: applications
+            )
+
+            record(
+                .applications,
+                state: .completed,
+                count: applications.count
+            )
+        }
+
+        // MARK: Persistence
+
+        if Task<Never, Never>.isCancelled {
+            record(
+                .persistence,
+                state: .cancelled,
+                count: 0
+            )
+        } else {
+            notify("Startup Persistence")
+
+            let items = StartupScanner.scan()
+            startupCount = items.count
+
+            findings += persistenceFindings(
+                from: items
+            )
+
+            record(
+                .persistence,
+                state: .completed,
+                count: items.count
+            )
+        }
+
         findings.sort {
             if $0.severity.rank != $1.severity.rank {
                 return $0.severity.rank < $1.severity.rank
@@ -128,9 +249,10 @@ enum SecurityAuditEngine {
             computerName: Host.current().localizedName ?? "Mac",
             macOSVersion:
                 ProcessInfo.processInfo.operatingSystemVersionString,
-            applicationCount: applications.count,
-            startupItemCount: startupItems.count,
-            findings: findings
+            applicationCount: applicationCount,
+            startupItemCount: startupCount,
+            findings: findings,
+            scanners: scannerResults
         )
     }
 }

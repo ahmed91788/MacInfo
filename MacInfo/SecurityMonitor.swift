@@ -26,12 +26,12 @@ struct SecuritySnapshot: Sendable {
     let hardenedRuntime: Bool?
 }
 
-private struct CommandResult {
+struct CommandResult {
     let exitCode: Int32
     let output: String
 }
 
-private enum SecurityCollector {
+enum SecurityCollector {
     static func run(
         _ executable: String,
         arguments: [String]

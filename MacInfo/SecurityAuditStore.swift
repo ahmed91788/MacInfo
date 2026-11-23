@@ -8,6 +8,14 @@ final class SecurityAuditStore: ObservableObject {
     @Published private(set) var history: [AuditReport] = []
     @Published private(set) var isScanning = false
     @Published private(set) var errorMessage: String?
+    
+    @Published private(set) var progress = AuditProgress(
+        completed: 0,
+        total: AuditScannerID.allCases.count,
+        currentScanner: ""
+    )
+
+    private var scanTask: Task<Void, Never>?
 
     private let maxHistory = 20
 
@@ -29,17 +37,28 @@ final class SecurityAuditStore: ObservableObject {
         loadHistory()
     }
 
+    
     func scan() {
         guard !isScanning else { return }
 
         isScanning = true
         errorMessage = nil
 
-        Task {
+        progress = AuditProgress(
+            completed: 0,
+            total: AuditScannerID.allCases.count,
+            currentScanner: "Starting"
+        )
+
+        scanTask = Task {
             let report = await Task.detached(
                 priority: .userInitiated
             ) {
-                await SecurityAuditEngine.scan()
+                await SecurityAuditEngine.scan { update in
+                    Task { @MainActor in
+                        self.progress = update
+                    }
+                }
             }.value
 
             currentReport = report
@@ -50,8 +69,14 @@ final class SecurityAuditStore: ObservableObject {
             }
 
             saveHistory()
+
             isScanning = false
+            scanTask = nil
         }
+    }
+
+    func cancelScan() {
+        scanTask?.cancel()
     }
 
     func selectReport(_ report: AuditReport) {
