@@ -24,7 +24,7 @@ struct InstalledApplication: Identifiable, Sendable {
     var id: String { path }
 }
 
-private enum ApplicationScanner {
+enum ApplicationScanner {
     static func scan() -> [InstalledApplication] {
         let home = FileManager.default.homeDirectoryForCurrentUser
 

@@ -13,6 +13,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     case applications = "Applications"
     case startup = "Startup Items"
     case persistence = "Persistence"
+    case audit = "Security Audit"
     case reports = "Reports"
 
     var id: String { rawValue }
@@ -29,6 +30,7 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .applications: "square.stack.3d.up"
         case .startup: "gearshape.2"
         case .persistence: "shield.checkered"
+        case .audit: "checkmark.shield"
         case .reports: "doc.text"
         }
     }
@@ -111,6 +113,9 @@ struct ContentView: View {
                     .frame(minHeight: 600)
             case .persistence:
                 AdvancedPersistenceView()
+                    .frame(minHeight: 650)
+            case .audit:
+                SecurityAuditView()
                     .frame(minHeight: 650)
             case .reports:
                 reports(s)

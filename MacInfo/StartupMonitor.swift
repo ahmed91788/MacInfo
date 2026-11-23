@@ -36,7 +36,7 @@ struct StartupItem: Identifiable, Sendable {
     }
 }
 
-private enum StartupScanner {
+enum StartupScanner {
     static func scan() -> [StartupItem] {
         let home = FileManager.default.homeDirectoryForCurrentUser
 
