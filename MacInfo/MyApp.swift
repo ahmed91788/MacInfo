@@ -1,9 +1,12 @@
+
 import SwiftUI
 
-@main struct MyApp: App {
+@main
+struct MacInfoApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
         }
+        .defaultSize(width: 1100, height: 720)
     }
 }

@@ -26,6 +26,7 @@
       "id": "000000000000000100000000",
       "product": "Products/MacInfo.app",
       "product-type": "application",
+      "last-swift-migration": "27.2",
       "build-phases": [
         "compile-sources",
         "frameworks",
@@ -33,6 +34,7 @@
       ],
       "build-settings": {
         "AUTOMATION_APPLE_EVENTS": "NO",
+        "CLANG_ENABLE_MODULES": "YES",
         "CODE_SIGN_IDENTITY[sdk=macosx*]": "Developer ID Application",
         "CODE_SIGN_STYLE": "Manual",
         "CURRENT_PROJECT_VERSION": "1",
@@ -80,6 +82,8 @@
         "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
         "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
         "SWIFT_EMIT_LOC_STRINGS": "YES",
+        "SWIFT_OBJC_BRIDGING_HEADER": "MacInfo/MacInfo-Bridging-Header.h",
+        "SWIFT_OPTIMIZATION_LEVEL[config=Debug]": "-Onone",
         "SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY": "YES",
         "SWIFT_VERSION": "5.0",
         "TARGETED_DEVICE_FAMILY": "1,2,7",
