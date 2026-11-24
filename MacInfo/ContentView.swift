@@ -8,6 +8,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     case performance = "Performance"
     case processes = "Processes"
     case network = "Network"
+    case networkReputation = "Network Reputation"
     case security = "Security"
     case signatures = "Signatures"
     case applications = "Applications"
@@ -32,6 +33,7 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .performance: "chart.xyaxis.line"
         case .processes: "list.bullet.rectangle"
         case .network: "network"
+        case .networkReputation: "network.badge.shield.half.filled"
         case .security: "shield.lefthalf.filled"
         case .signatures: "signature"
         case .applications: "square.stack.3d.up"
@@ -153,6 +155,9 @@ struct ContentView: View {
 
         case .network:
             NetworkMonitorView()
+            
+        case .networkReputation:
+            NetworkReputationView()
 
         case .security:
             SecurityView()

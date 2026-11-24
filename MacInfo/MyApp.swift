@@ -11,6 +11,9 @@ struct MacInfoApp: App {
 
     @StateObject private var malwareReputation =
         MalwareReputationStore()
+    
+    @StateObject private var networkReputation =
+        NetworkReputationStore()
 
     var body: some Scene {
 
@@ -20,6 +23,7 @@ struct MacInfoApp: App {
                 .environmentObject(securityMonitoring)
                 .environmentObject(appVisibility)
                 .environmentObject(malwareReputation)
+                .environmentObject(networkReputation)
         }
         .defaultSize(
             width: 1100,
