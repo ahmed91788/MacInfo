@@ -15,6 +15,8 @@ enum MacSection: String, CaseIterable, Identifiable {
     case persistence = "Persistence"
     case extensions = "System Extensions"
     case profiles = "Configuration Profiles"
+    case privacy = "Privacy Permissions"
+    case monitoring = "Security Monitoring"
     case audit = "Security Audit"
     case baseline = "Security Baseline"
     case integrity = "File Integrity"
@@ -36,6 +38,8 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .persistence: "shield.checkered"
         case .extensions: "puzzlepiece.extension"
         case .profiles: "doc.text"
+        case .privacy: "hand.raised"
+        case .monitoring: "shield.checkered"
         case .audit: "checkmark.shield"
         case .baseline: "clock.arrow.circlepath"
         case .integrity: "checkmark.seal"
@@ -68,22 +72,32 @@ struct ContentView: View {
                 ideal: 220
             )
         } detail: {
-            ScrollView {
+            Group {
                 if let snapshot = monitor.snapshot {
                     detail(snapshot)
                 } else {
                     ProgressView("Loading system information...")
-                        .frame(maxWidth: .infinity)
-                        .padding(50)
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity
+                        )
                 }
             }
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .topLeading
+            )
             .navigationTitle(selected?.rawValue ?? "MacInfo")
             .toolbar {
                 ToolbarItem {
                     Button {
                         monitor.refresh()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(
+                            "Refresh",
+                            systemImage: "arrow.clockwise"
+                        )
                     }
                 }
             }
@@ -92,55 +106,90 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    
     @ViewBuilder
     private func detail(_ s: MacSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            switch selected ?? .overview {
-            case .overview:
+        switch selected ?? .overview {
+
+        case .overview:
+            scrollablePage {
                 overview(s)
-            case .hardware:
+            }
+
+        case .hardware:
+            scrollablePage {
                 hardware(s)
-            case .performance:
+            }
+
+        case .performance:
+            scrollablePage {
                 performance(s)
-            case .processes:
-                ProcessesView()
-                    .frame(minHeight: 500)
-            case .network:
-                NetworkMonitorView()
-                    .frame(minHeight: 650)
-            case .security:
-                SecurityView()
-                    .frame(minHeight: 550)
-            case .signatures:
-                SignatureInspectorView()
-                    .frame(minHeight: 600)
-            case .applications:
-                ApplicationInventoryView()
-                    .frame(minHeight: 600)
-            case .startup:
-                StartupItemsView()
-                    .frame(minHeight: 600)
-            case .persistence:
-                AdvancedPersistenceView()
-                    .frame(minHeight: 650)
-            case .audit:
-                SecurityAuditView()
-                    .frame(minHeight: 650)
-            case .extensions:
-                SystemExtensionsView()
-            case .profiles:
-                ConfigurationProfilesView()
-            case .baseline:
-                SecurityBaselineView()
-                    .frame(minHeight: 650)
-            case .integrity:
-                FileIntegrityView()
-            case .reports:
+            }
+
+        case .processes:
+            ProcessesView()
+
+        case .network:
+            NetworkMonitorView()
+
+        case .security:
+            SecurityView()
+
+        case .signatures:
+            SignatureInspectorView()
+
+        case .applications:
+            ApplicationInventoryView()
+
+        case .startup:
+            StartupItemsView()
+
+        case .persistence:
+            AdvancedPersistenceView()
+
+        case .extensions:
+            SystemExtensionsView()
+
+        case .profiles:
+            ConfigurationProfilesView()
+
+        case .privacy:
+            PrivacyPermissionsView()
+            
+        case .monitoring:
+            SecurityMonitoringView()
+
+        case .audit:
+            SecurityAuditView()
+
+        case .baseline:
+            SecurityBaselineView()
+
+        case .integrity:
+            FileIntegrityView()
+
+        case .reports:
+            scrollablePage {
                 reports(s)
             }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    private func scrollablePage<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ScrollView {
+            content()
+                .padding(24)
+                .frame(
+                    maxWidth: .infinity,
+                    alignment: .leading
+                )
+        }
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity
+        )
     }
 
     private func overview(_ s: MacSnapshot) -> some View {
