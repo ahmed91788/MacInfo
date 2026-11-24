@@ -8,16 +8,18 @@ struct MacInfoApp: App {
 
     @StateObject private var appVisibility =
         AppVisibilityStore()
-    
-    @NSApplicationDelegateAdaptor(MacInfoAppDelegate.self)
-    private var appDelegate
+
+    @StateObject private var malwareReputation =
+        MalwareReputationStore()
 
     var body: some Scene {
 
         WindowGroup(id: "main") {
+
             ContentView()
                 .environmentObject(securityMonitoring)
                 .environmentObject(appVisibility)
+                .environmentObject(malwareReputation)
         }
         .defaultSize(
             width: 1100,
@@ -25,10 +27,13 @@ struct MacInfoApp: App {
         )
 
         MenuBarExtra {
+
             SecurityMonitoringMenu()
                 .environmentObject(securityMonitoring)
                 .environmentObject(appVisibility)
+
         } label: {
+
             Image(
                 systemName: securityMonitoring.settings.enabled
                     ? "shield.checkered"

@@ -20,6 +20,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     case audit = "Security Audit"
     case baseline = "Security Baseline"
     case integrity = "File Integrity"
+    case malwareReputation = "Malware Reputation"
     case reports = "Reports"
 
     var id: String { rawValue }
@@ -43,6 +44,7 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .audit: "checkmark.shield"
         case .baseline: "clock.arrow.circlepath"
         case .integrity: "checkmark.seal"
+        case .malwareReputation: "exclamationmark.shield"
         case .reports: "doc.text"
         }
     }
@@ -188,6 +190,9 @@ struct ContentView: View {
         case .integrity:
             FileIntegrityView()
 
+        case .malwareReputation:
+            MalwareReputationView()
+            
         case .reports:
             scrollablePage {
                 reports(s)
