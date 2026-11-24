@@ -14,6 +14,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     case startup = "Startup Items"
     case persistence = "Persistence"
     case extensions = "System Extensions"
+    case profiles = "Configuration Profiles"
     case audit = "Security Audit"
     case baseline = "Security Baseline"
     case integrity = "File Integrity"
@@ -34,6 +35,7 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .startup: "gearshape.2"
         case .persistence: "shield.checkered"
         case .extensions: "puzzlepiece.extension"
+        case .profiles: "doc.text"
         case .audit: "checkmark.shield"
         case .baseline: "clock.arrow.circlepath"
         case .integrity: "checkmark.seal"
@@ -126,6 +128,8 @@ struct ContentView: View {
                     .frame(minHeight: 650)
             case .extensions:
                 SystemExtensionsView()
+            case .profiles:
+                ConfigurationProfilesView()
             case .baseline:
                 SecurityBaselineView()
                     .frame(minHeight: 650)

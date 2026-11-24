@@ -76,7 +76,7 @@ struct MacKernelExtension: Identifiable, Sendable {
     }
 }
 
-struct ExtensionCommandResult: Sendable {
+nonisolated struct ExtensionCommandResult: Sendable {
     let executable: String
     let arguments: [String]
 
