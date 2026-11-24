@@ -36,7 +36,7 @@ final class SecurityBaselineStore: ObservableObject {
             let snapshot = await Task.detached(
                 priority: .userInitiated
             ) {
-                SecurityBaselineEngine.capture()
+                await SecurityBaselineEngine.capture()
             }.value
 
             do {
@@ -67,7 +67,7 @@ final class SecurityBaselineStore: ObservableObject {
             let snapshot = await Task.detached(
                 priority: .userInitiated
             ) {
-                SecurityBaselineEngine.capture()
+                await SecurityBaselineEngine.capture()
             }.value
 
             current = snapshot
