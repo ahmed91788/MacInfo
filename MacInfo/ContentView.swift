@@ -52,6 +52,7 @@ struct ContentView: View {
     @StateObject private var monitor = SystemMonitor()
     @State private var selected: MacSection? = .overview
     @State private var performanceRange: PerformanceRange = .oneMinute
+    @EnvironmentObject private var appVisibility: AppVisibilityStore
 
     var body: some View {
         NavigationSplitView {
@@ -90,6 +91,7 @@ struct ContentView: View {
             )
             .navigationTitle(selected?.rawValue ?? "MacInfo")
             .toolbar {
+
                 ToolbarItem {
                     Button {
                         monitor.refresh()
@@ -99,6 +101,24 @@ struct ContentView: View {
                             systemImage: "arrow.clockwise"
                         )
                     }
+                }
+
+                ToolbarItem {
+                    Button {
+                        appVisibility.hide()
+                    } label: {
+                        Label(
+                            "Hide to Menu Bar",
+                            systemImage: "eye.slash"
+                        )
+                    }
+                    .help(
+                        "Hide MacInfo while keeping monitoring active"
+                    )
+                    .keyboardShortcut(
+                        "h",
+                        modifiers: [.command, .shift]
+                    )
                 }
             }
         }
