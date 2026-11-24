@@ -15,6 +15,7 @@ enum MacSection: String, CaseIterable, Identifiable {
     case persistence = "Persistence"
     case audit = "Security Audit"
     case baseline = "Security Baseline"
+    case integrity = "File Integrity"
     case reports = "Reports"
 
     var id: String { rawValue }
@@ -33,6 +34,7 @@ enum MacSection: String, CaseIterable, Identifiable {
         case .persistence: "shield.checkered"
         case .audit: "checkmark.shield"
         case .baseline: "clock.arrow.circlepath"
+        case .integrity: "checkmark.seal"
         case .reports: "doc.text"
         }
     }
@@ -123,6 +125,8 @@ struct ContentView: View {
             case .baseline:
                 SecurityBaselineView()
                     .frame(minHeight: 650)
+            case .integrity:
+                FileIntegrityView()
             case .reports:
                 reports(s)
             }

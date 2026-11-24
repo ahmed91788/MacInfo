@@ -2,13 +2,19 @@
 import Foundation
 import CryptoKit
 
+
 enum FileHashStatus: String, Codable, Sendable {
     case success
     case missing
     case unreadable
     case notRegularFile
     case changedDuringRead
+
+    // MacInfo 2.4
+    case skippedTooLarge
+    case cancelled
 }
+
 
 struct FileHashResult: Codable, Sendable {
     let path: String
@@ -18,42 +24,75 @@ struct FileHashResult: Codable, Sendable {
     let modifiedAt: Date?
 }
 
+
 enum FileIntegrityHasher {
     static func hash(
         path: String,
-        chunkSize: Int = 1024 * 1024
+        chunkSize: Int = 1024 * 1024,
+        maximumFileSize: UInt64 = UInt64.max
     ) -> FileHashResult {
         let url = URL(fileURLWithPath: path)
         let fm = FileManager.default
 
-        func failure(_ status: FileHashStatus) -> FileHashResult {
+        func failure(
+            _ status: FileHashStatus,
+            size: UInt64? = nil
+        ) -> FileHashResult {
             FileHashResult(
                 path: path,
                 status: status,
                 sha256: nil,
-                size: nil,
+                size: size,
                 modifiedAt: nil
             )
         }
 
-        guard fm.fileExists(atPath: path) else {
-            return failure(.missing)
+        if Task<Never, Never>.isCancelled {
+            return failure(.cancelled)
         }
 
-        guard let attributes = try? fm.attributesOfItem(
-            atPath: path
-        ) else {
+        let attributes: [FileAttributeKey: Any]
+
+        do {
+            attributes = try fm.attributesOfItem(
+                atPath: path
+            )
+        } catch {
+            let nsError = error as NSError
+
+            if nsError.domain == NSCocoaErrorDomain &&
+                (nsError.code == NSFileNoSuchFileError ||
+                 nsError.code == NSFileReadNoSuchFileError) {
+                return failure(.missing)
+            }
+
             return failure(.unreadable)
         }
 
-        guard attributes[.type] as? FileAttributeType == .typeRegular else {
+        guard attributes[.type] as? FileAttributeType
+                == .typeRegular else {
             return failure(.notRegularFile)
         }
 
-        let initialSize = (attributes[.size] as? NSNumber)?
-            .uint64Value ?? 0
+        let initialSize =
+            (attributes[.size] as? NSNumber)?
+                .uint64Value ?? 0
 
-        let initialDate = attributes[.modificationDate] as? Date
+        let initialDate =
+            attributes[.modificationDate] as? Date
+
+        let initialFileID =
+            attributes[.systemFileNumber] as? NSNumber
+
+        let initialDeviceID =
+            attributes[.systemNumber] as? NSNumber
+
+        guard initialSize <= maximumFileSize else {
+            return failure(
+                .skippedTooLarge,
+                size: initialSize
+            )
+        }
 
         guard let handle = try? FileHandle(
             forReadingFrom: url
@@ -70,16 +109,31 @@ enum FileIntegrityHasher {
 
         do {
             while true {
+                if Task<Never, Never>.isCancelled {
+                    return failure(.cancelled)
+                }
+
                 let data = try handle.read(
-                    upToCount: max(4096, chunkSize)
+                    upToCount: max(
+                        4096,
+                        min(chunkSize, 8 * 1024 * 1024)
+                    )
                 ) ?? Data()
 
                 if data.isEmpty {
                     break
                 }
 
-                hasher.update(data: data)
                 bytesRead += UInt64(data.count)
+
+                guard bytesRead <= maximumFileSize else {
+                    return failure(
+                        .skippedTooLarge,
+                        size: bytesRead
+                    )
+                }
+
+                hasher.update(data: data)
             }
         } catch {
             return failure(.unreadable)
@@ -88,18 +142,32 @@ enum FileIntegrityHasher {
         guard let finalAttributes = try? fm.attributesOfItem(
             atPath: path
         ) else {
-            return failure(.unreadable)
+            return failure(.changedDuringRead)
         }
 
-        let finalSize = (finalAttributes[.size] as? NSNumber)?
-            .uint64Value ?? 0
+        let finalSize =
+            (finalAttributes[.size] as? NSNumber)?
+                .uint64Value ?? 0
 
-        let finalDate = finalAttributes[.modificationDate] as? Date
+        let finalDate =
+            finalAttributes[.modificationDate] as? Date
+
+        let finalFileID =
+            finalAttributes[.systemFileNumber] as? NSNumber
+
+        let finalDeviceID =
+            finalAttributes[.systemNumber] as? NSNumber
 
         guard bytesRead == initialSize,
               initialSize == finalSize,
-              initialDate == finalDate else {
+              initialDate == finalDate,
+              initialFileID == finalFileID,
+              initialDeviceID == finalDeviceID else {
             return failure(.changedDuringRead)
+        }
+
+        if Task<Never, Never>.isCancelled {
+            return failure(.cancelled)
         }
 
         let digest = hasher.finalize()
@@ -117,3 +185,4 @@ enum FileIntegrityHasher {
         )
     }
 }
+
