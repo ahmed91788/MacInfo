@@ -106,17 +106,5 @@ struct SecurityMonitoringMenu: View {
 
     private func showMacInfo() {
         appVisibility.show()
-
-        if let window = NSApp.windows.first(
-            where: {
-                $0.canBecomeMain &&
-                $0.isVisible
-            }
-        ) {
-            window.deminiaturize(nil)
-            window.makeKeyAndOrderFront(nil)
-        } else {
-            openWindow(id: "main")
-        }
     }
 }
